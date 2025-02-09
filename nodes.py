@@ -1,3 +1,14 @@
+
+class a_AlwaysEqualProxy(str):
+    def __eq__(self, _):
+        return True
+
+    def __ne__(self, _):
+        return False
+
+any_type = a_AlwaysEqualProxy("*")
+
+
 class StringNodeClass:
     @classmethod
     def INPUT_TYPES(s):
@@ -303,6 +314,7 @@ class KANI_Checkpoint_Loader_Simple:
 import random
 
 class KANI_TrueorFalse:
+    """input をそのまま出力し、50% の確率で True/False を返す"""
     def __init__(self):
         pass
 
@@ -310,25 +322,25 @@ class KANI_TrueorFalse:
     def INPUT_TYPES(cls):
         return {
             "optional": {
-                "signal": ("*",)  # 任意の型の入力を受け付ける
+                "input": (any_type, {})  # 任意の型の入力を受け付ける
             },
         }
 
-    RETURN_TYPES = ("*", "BOOLEAN")  # 順序を修正（signal が最初）
-    RETURN_NAMES = ("signal", "result")  # 戻り値の名前を定義
+    RETURN_TYPES = (any_type, "BOOLEAN")  # 順序を修正（signal が最初）
+    RETURN_NAMES = ("output", "50%/50%")  # 戻り値の名前を定義
     FUNCTION = "execute"
 
     CATEGORY = "KANI-NODES"
 
-    def execute(self, signal=None):
+    def execute(self, input, **kwargs):
         """
         signal をそのまま出力し、True か False をランダムに返す
         """
         result = random.random() < 0.5  # 50% の確率で True/False を返す
-        return signal, result
+        return input, result
 
     @classmethod
-    def IS_CHANGED(cls, signal=None, **kwargs):
+    def IS_CHANGED(cls, input, **kwargs):
         """
         常に再評価を行う
         """
@@ -337,15 +349,6 @@ class KANI_TrueorFalse:
 
 import json
 
-
-class a_AlwaysEqualProxy(str):
-    def __eq__(self, _):
-        return True
-
-    def __ne__(self, _):
-        return False
-
-any_type = a_AlwaysEqualProxy("*")
 
 class KANI_ShowAnything:
     @classmethod
