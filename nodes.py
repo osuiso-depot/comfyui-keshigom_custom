@@ -38,7 +38,7 @@ class RegExTextChopper:
     RETURN_NAMES = ("Part 1", "Part 2", "Part 3", "Part 4", "All parts")
 
     FUNCTION = "run"
-    CATEGORY = "KANI🦀NODES"
+    CATEGORY = "KANI-NODES"
 
     @staticmethod
     def is_valid_regex(regex_from_user: str) -> bool:
@@ -65,8 +65,8 @@ class RegExTextChopper:
             text_all = text
 
         return text1, text2, text3, text4, text_all
- 
- 
+
+
 class ResolutionSelector:
     """
     A node to provide a drop-down list of resolutions and returns two int values (width and height).
@@ -84,7 +84,7 @@ class ResolutionSelector:
         (896, 1152),
         (896, 1088),
         (960, 1088),
-        (960, 1024),  
+        (960, 1024),
         (1088, 960),
         (1088, 896),
         (1152, 896),
@@ -92,7 +92,7 @@ class ResolutionSelector:
         (1216, 832),
         (1280, 768),
         (1344, 768),
-        (1408, 704),  
+        (1408, 704),
         (1472, 704),
         (1536, 640),
         (1600, 640),
@@ -125,7 +125,7 @@ class ResolutionSelector:
     RETURN_TYPES = ("INT", "INT")
     RETURN_NAMES = ("width", "height")
     FUNCTION = "select_resolution"
-    CATEGORY = "KANI🦀NODES"
+    CATEGORY = "KANI-NODES"
 
     def select_resolution(self, base_resolution: str, base_adjustment: str, FLIP: bool) -> tuple[int, int]:
         """
@@ -187,7 +187,7 @@ class ResolutionSelectorConst:
     RETURN_TYPES = ("INT", "INT")
     RETURN_NAMES = ("width", "height")
     FUNCTION = "select_resolution"
-    CATEGORY = "KANI🦀NODES"
+    CATEGORY = "KANI-NODES"
 
     def select_resolution(self, width: int, height: int, base_adjustment: str, FLIP: bool) -> tuple[int, int]:
         """
@@ -236,7 +236,7 @@ class KANI_TextFind:
     RETURN_NAMES = ("found",)
     FUNCTION = "execute"
 
-    CATEGORY = "KANI🦀NODES"
+    CATEGORY = "KANI-NODES"
 
     def execute(self, text: str, substring: str, pattern: str) -> tuple[bool]:
         if substring:
@@ -263,7 +263,7 @@ class KANI_Checkpoint_Loader_Simple:
     RETURN_NAMES = ("MODEL", "CLIP", "VAE", "NAME_STRING")
     FUNCTION = "load_checkpoint"
 
-    CATEGORY = "KANI🦀NODES"
+    CATEGORY = "KANI-NODES"
 
     def load_checkpoint(self, ckpt_str, output_vae=True, output_clip=True):
         # 空文字やNoneのチェック
@@ -318,7 +318,7 @@ class KANI_TrueorFalse:
     RETURN_NAMES = ("signal", "result")  # 戻り値の名前を定義
     FUNCTION = "execute"
 
-    CATEGORY = "KANI🦀NODES"
+    CATEGORY = "KANI-NODES"
 
     def execute(self, signal=None):
         """
@@ -334,3 +334,127 @@ class KANI_TrueorFalse:
         """
         return float("NaN")
 
+
+import json
+
+
+class a_AlwaysEqualProxy(str):
+    def __eq__(self, _):
+        return True
+
+    def __ne__(self, _):
+        return False
+
+any_type = a_AlwaysEqualProxy("*")
+
+class KANI_ShowAnything:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {},
+            "optional": {"anything": (any_type, {})},  # 何でも受け入れる
+            "hidden": {
+                "unique_id": "UNIQUE_ID",
+                "extra_pnginfo": "EXTRA_PNGINFO",
+            }
+        }
+
+    RETURN_TYPES = (any_type,)  # 何でも返せる
+    RETURN_NAMES = ("output",)
+    INPUT_IS_LIST = True  # `anything` はリストとして受け取る
+    OUTPUT_NODE = True
+    FUNCTION = "log_input"
+    CATEGORY = "KANI-NODES/Logic"
+
+    def log_input(self, unique_id=None, extra_pnginfo=None, **kwargs):
+        """
+        何でも受け取り、それをノード上に表示する。
+        """
+        values = []
+        if "anything" in kwargs:
+            for val in kwargs["anything"]:
+                try:
+                    # 文字列・数値・辞書などを適切に処理
+                    if isinstance(val, str):
+                        values.append(val)
+                    elif isinstance(val, (int, float, bool)):
+                        values.append(str(val))  # 数値を文字列に変換
+                    elif isinstance(val, (list, dict, set, tuple)):
+                        values.append(json.dumps(val, ensure_ascii=False))
+                    else:
+                        values.append(str(val))
+                except Exception as e:
+                    print(f"Error processing value: {val}, Exception: {e}")
+                    values.append(str(val))
+
+        # ワークフロー情報を取得してノードにデータをセット
+        if not extra_pnginfo:
+            print("Error: extra_pnginfo is empty")
+        elif not isinstance(extra_pnginfo[0], dict) or "workflow" not in extra_pnginfo[0]:
+            print("Error: extra_pnginfo[0] is not a dict or missing 'workflow' key")
+        else:
+            workflow = extra_pnginfo[0]["workflow"]
+            node = next((x for x in workflow["nodes"] if str(x["id"]) == unique_id[0]), None)
+            if node:
+                node["widgets_values"] = [values]
+
+        # 単一要素なら `values[0]` を返す、それ以外は `values` のまま
+        if isinstance(values, list) and len(values) == 1:
+            return {"ui": {"text": values}, "result": (values[0],), }
+        else:
+            return {"ui": {"text": values}, "result": (values,), }
+
+
+
+class KANI_Multiplexer:
+    """
+    入力2 (制御信号): これがONの場合、入力1が出力1に流れます。
+    入力2 (制御信号): これがOFFの場合、入力1が出力2に流れます。
+    """
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "flag": ("BOOLEAN", {"default": True}),  # `bool` を避ける
+                "input": (any_type, {"tooltip": "This input flows to either output1 or 2."}),  # 何でも受け入れる
+            }
+        }
+
+    # 出力1,2どちらかに signal を流す
+    RETURN_TYPES = (any_type, any_type)
+    RETURN_NAMES = ("output_1", "output_2")  # 出力名を明確に
+
+    FUNCTION = "execute"
+
+    CATEGORY = "KANI-NODES/Logic"
+
+    def execute(self, flag, input):
+        if flag:
+            return (input, "")
+        else:
+            return ("", input)
+
+
+NODE_CLASS_MAPPINGS = {
+    "RegExTextChopper": RegExTextChopper,
+    "ResolutionSelector": ResolutionSelector,
+    "ResolutionSelectorConst": ResolutionSelectorConst,
+    "KANI_TextFind": KANI_TextFind,
+    "KANI_Checkpoint_Loader_Simple": KANI_Checkpoint_Loader_Simple,
+    "KANI_TrueorFalse": KANI_TrueorFalse,
+    "KANI_ShowAnything": KANI_ShowAnything,
+    "KANI_Multiplexer": KANI_Multiplexer,
+    "StringNodeClass": StringNodeClass
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "RegExTextChopper":"KANI🦀RegexpChopper",
+    "ResolutionSelector":"KANI🦀FLIP-W/H Selector",
+    "ResolutionSelectorConst":"KANI🦀FLIP-W/H SelectorConst",
+    "KANI_TextFind":"KANI🦀TextFind",
+    "KANI_Checkpoint_Loader_Simple":"KANI🦀ckpt_Loader_Simple",
+    "KANI_TrueorFalse":"KANI🦀True-or-False",
+    "KANI_ShowAnything":"KANI🦀showAnything",
+    "KANI_Multiplexer":"KANI🦀Multiplexer",
+    "StringNodeClass":"myStringNode"
+}
