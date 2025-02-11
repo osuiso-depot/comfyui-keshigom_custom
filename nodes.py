@@ -175,7 +175,7 @@ class ResolutionSelector:
 
 class ResolutionSelectorConst:
     """
-    A node to provide a constanct int of resolutions and returns two int values (width and height).
+    A node to provide a constant int of resolutions and returns two int values (width and height).
     """
 
     def __init__(self):
@@ -183,9 +183,6 @@ class ResolutionSelectorConst:
 
     @classmethod
     def INPUT_TYPES(cls):
-        """
-        Return a dictionary which contains config for all input fields.
-        """
         return {
             "required": {
                 "width": ("INT", {"default": 1024, "min": 1, "max": 65536}),  # 最小値を1に変更
@@ -230,6 +227,9 @@ class ResolutionSelectorConst:
         return (adjusted_height, adjusted_width) if FLIP else (adjusted_width, adjusted_height)
 
 class KANI_TextFind:
+    """
+    This class performs string search using either a substring or a regular expression pattern.
+    """
     def __init__(self):
         pass
 
@@ -260,6 +260,9 @@ import folder_paths as comfy_paths
 import comfy.sd
 
 class KANI_Checkpoint_Loader_Simple:
+    """
+    NODE for loading checkpoints from a string.
+    """
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -321,9 +324,7 @@ class KANI_TrueorFalse:
     @classmethod
     def INPUT_TYPES(cls):
         return {
-            "optional": {
-                "input": (any_type, {})  # 任意の型の入力を受け付ける
-            },
+            "input": (any_type, {"tooltip": "The input flows directly to the output."}) # 何でも受け入れる
         }
 
     RETURN_TYPES = (any_type, "BOOLEAN")  # 順序を修正（signal が最初）
@@ -411,8 +412,8 @@ class KANI_ShowAnything:
 
 class KANI_Multiplexer:
     """
-    入力2 (制御信号): これがONの場合、入力1が出力1に流れます。
-    入力2 (制御信号): これがOFFの場合、入力1が出力2に流れます。
+    flag (制御信号): これがONの場合、inputがoutput1に流れます。
+    flag (制御信号): これがOFFの場合、inputがoutput2に流れます。
     """
     @classmethod
     def INPUT_TYPES(cls):
