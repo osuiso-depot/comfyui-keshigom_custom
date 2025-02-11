@@ -324,7 +324,9 @@ class KANI_TrueorFalse:
     @classmethod
     def INPUT_TYPES(cls):
         return {
-            "input": (any_type, {"tooltip": "The input flows directly to the output."}) # 何でも受け入れる
+            "optional": {
+                "input": (any_type, {"tooltip": "The input flows directly to the output."})  # 任意の型の入力を受け付ける
+            },
         }
 
     RETURN_TYPES = (any_type, "BOOLEAN")  # 順序を修正（signal が最初）
