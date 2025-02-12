@@ -1,2 +1,3 @@
 /comfyui-keshigom_custom.code-workspace
 **/__pycache__/**
+.vscode/**
