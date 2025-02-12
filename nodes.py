@@ -259,7 +259,7 @@ import os
 import folder_paths as comfy_paths
 import comfy.sd
 
-class KANI_Checkpoint_Loader_Simple:
+class KANI_Checkpoint_Loader_From_String:
     """
     NODE for loading checkpoints from a string.
     """
@@ -441,15 +441,235 @@ class KANI_Multiplexer:
             return ("", input)
 
 
+import ast
+import math
+import random
+import operator as op
+
+operators = {
+    ast.Add: op.add,
+    ast.Sub: op.sub,
+    ast.Mult: op.mul,
+    ast.Div: op.truediv,
+    ast.FloorDiv: op.floordiv,
+    ast.Pow: op.pow,
+    ast.BitXor: op.xor,
+    ast.USub: op.neg,
+    ast.Mod: op.mod,
+    ast.BitAnd: op.and_,
+    ast.BitOr: op.or_,
+    ast.Invert: op.invert,
+    ast.And: lambda a, b: 1 if a and b else 0,
+    ast.Or: lambda a, b: 1 if a or b else 0,
+    ast.Not: lambda a: 0 if a else 1,
+    ast.RShift: op.rshift,
+    ast.LShift: op.lshift
+}
+
+
+functions = {
+    "round": {
+        "args": (1, 2),
+        "call": lambda a, b = None: round(a, b),
+        "hint": "number, dp? = 0"
+    },
+    "ceil": {
+        "args": (1, 1),
+        "call": lambda a: math.ceil(a),
+        "hint": "number"
+    },
+    "floor": {
+        "args": (1, 1),
+        "call": lambda a: math.floor(a),
+        "hint": "number"
+    },
+    "min": {
+        "args": (2, None),
+        "call": lambda *args: min(*args),
+        "hint": "...numbers"
+    },
+    "max": {
+        "args": (2, None),
+        "call": lambda *args: max(*args),
+        "hint": "...numbers"
+    },
+    "randomint": {
+        "args": (2, 2),
+        "call": lambda a, b: random.randint(a, b),
+        "hint": "min, max"
+    },
+    "randomchoice": {
+        "args": (2, None),
+        "call": lambda *args: random.choice(args),
+        "hint": "...numbers"
+    },
+    "sqrt": {
+        "args": (1, 1),
+        "call": lambda a: math.sqrt(a),
+        "hint": "number"
+    },
+    "int": {
+        "args": (1, 1),
+        "call": lambda a = None: int(a),
+        "hint": "number"
+    },
+    "iif": {
+        "args": (3, 3),
+        "call": lambda a, b, c = None: b if a else c,
+        "hint": "value, truepart, falsepart"
+    },
+}
+
+class MathExpression:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "expression": ("STRING", {"multiline": True, "dynamicPrompts": False}),
+            },
+            "optional": {
+                "a": (any_type, {}),
+                "b": (any_type, {}),
+                "c": (any_type, {}),
+            },
+            "hidden": {"extra_pnginfo": "EXTRA_PNGINFO", "prompt": "PROMPT"},
+        }
+
+    RETURN_TYPES = ("INT", "FLOAT")
+    FUNCTION = "evaluate"
+    CATEGORY = "KANI-NODES/Math"
+    OUTPUT_NODE = True
+
+    @classmethod
+    def IS_CHANGED(cls, expression, **kwargs):
+        """ランダム関数が含まれる場合は、常に再評価を行う"""
+        return float("NaN") if "random" in expression else expression
+
+    # widgetの値を取得するためのメソッド
+    def get_widget_value(self, extra_pnginfo, prompt, node_name, widget_name):
+        workflow = extra_pnginfo["workflow"] if "workflow" in extra_pnginfo else { "nodes": [] }
+        node_id = None
+        for node in workflow["nodes"]:
+            name = node["type"]
+            if "properties" in node:
+                if "Node name for S&R" in node["properties"]:
+                    name = node["properties"]["Node name for S&R"]
+            if name == node_name:
+                node_id = node["id"]
+                break
+            if "title" in node:
+                name = node["title"]
+            if name == node_name:
+                node_id = node["id"]
+                break
+        if node_id is not None:
+            values = prompt[str(node_id)]
+            if "inputs" in values:
+                if widget_name in values["inputs"]:
+                    value = values["inputs"][widget_name]
+                    if isinstance(value, list):
+                        raise ValueError("Converted widgets are not supported via named reference, use the inputs instead.")
+                    return value
+            raise NameError(f"Widget not found: {node_name}.{widget_name}")
+        raise NameError(f"Node not found: {node_name}.{widget_name}")
+
+    # image,lantentのサイズを取得するためのメソッド
+    def get_size(self, target, property):
+        if isinstance(target, dict) and "samples" in target:
+            # Latent
+            if property == "width":
+                return target["samples"].shape[3] * 8
+            return target["samples"].shape[2] * 8
+        else:
+            # Image
+            if property == "width":
+                return target.shape[2]
+            return target.shape[1]
+
+
+    def evaluate(self, expression, prompt, extra_pnginfo={}, a=None, b=None, c=None):
+        expression = expression.replace('\n', ' ').replace('\r', '')
+        # ノードが空の場合は適切に処理(0を返す)
+        if not expression:
+            return {"ui": {"value": [""]}, "result": (0, 0.0)}
+        node = ast.parse(expression, mode='eval').body
+        lookup = {"a": a, "b": b, "c": c}
+
+        def eval_op(node, l, r):
+            l = eval_expr(l)
+            r = eval_expr(r)
+            l = l if isinstance(l, int) else float(l)
+            r = r if isinstance(r, int) else float(r)
+            return operators[type(node.op)](l, r)
+
+        def eval_expr(node):
+            if isinstance(node, ast.Constant):  # 数値リテラル
+                return node.value
+            elif isinstance(node, ast.Name):  # 変数
+                if node.id in lookup:
+                    val = lookup[node.id]
+                    if isinstance(val, (int, float, complex)):
+                        return val
+                    else:
+                        raise TypeError(
+                            f"Compex types (LATENT/IMAGE) need to reference their width/height, e.g. {node.id}.width")
+                raise NameError(f"Name not found: {node.id}")
+            elif isinstance(node, ast.BinOp):  # 二項演算 (+, -, *, /)
+                left, right = eval_expr(node.left), eval_expr(node.right)
+                return operators[type(node.op)](left, right)
+            elif isinstance(node, ast.UnaryOp):  # 単項演算 (-, ~, not)
+                return operators[type(node.op)](eval_expr(node.operand))
+            elif isinstance(node, ast.BoolOp):  # `and` / `or`
+                return eval_op(node, node.values[0], node.values[1])
+            elif isinstance(node, ast.Compare):  # 比較演算 (x < y < z)
+                l = eval_expr(node.left)
+                r = eval_expr(node.comparators[0])
+                if isinstance(node.ops[0], ast.Eq):
+                    return 1 if l == r else 0
+                if isinstance(node.ops[0], ast.NotEq):
+                    return 1 if l != r else 0
+                if isinstance(node.ops[0], ast.Gt):
+                    return 1 if l > r else 0
+                if isinstance(node.ops[0], ast.GtE):
+                    return 1 if l >= r else 0
+                if isinstance(node.ops[0], ast.Lt):
+                    return 1 if l < r else 0
+                if isinstance(node.ops[0], ast.LtE):
+                    return 1 if l <= r else 0
+                raise NotImplementedError(
+                    "Operator " + node.ops[0].__class__.__name__ + " not supported.")
+            elif isinstance(node, ast.Call):  # 関数呼び出し
+                func_name = node.func.id
+                if func_name in functions:
+                    func = functions[func_name]
+                    args = [eval_expr(arg) for arg in node.args]
+                    if len(args) < func["args"][0] or (func["args"][1] is not None and len(args) > func["args"][1]):
+                        raise ValueError(f"関数 '{func_name}' の引数の数が不正です")
+                    return func["call"](*args)
+                raise ValueError(f"関数 '{func_name}' は未定義です")
+            # 属性参照 (widget の値取得)
+            elif isinstance(node, ast.Attribute):
+                if node.value.id in lookup:
+                    if node.attr == "width" or node.attr == "height":
+                        return self.get_size(lookup[node.value.id], node.attr)
+                return self.get_widget_value(extra_pnginfo, prompt, node.value.id, node.attr)
+            else:
+                raise TypeError(f"未対応のノードタイプ: {type(node).__name__}")
+
+        result = eval_expr(node)
+        return {"ui": {"value": [result]}, "result": (int(result), float(result))}
+
+
 NODE_CLASS_MAPPINGS = {
     "RegExTextChopper": RegExTextChopper,
     "ResolutionSelector": ResolutionSelector,
     "ResolutionSelectorConst": ResolutionSelectorConst,
     "KANI_TextFind": KANI_TextFind,
-    "KANI_Checkpoint_Loader_Simple": KANI_Checkpoint_Loader_Simple,
+    "KANI_Checkpoint_Loader_From_String": KANI_Checkpoint_Loader_From_String,
     "KANI_TrueorFalse": KANI_TrueorFalse,
     "KANI_ShowAnything": KANI_ShowAnything,
     "KANI_Multiplexer": KANI_Multiplexer,
+    "KANI_MathExpression": MathExpression,
     "StringNodeClass": StringNodeClass
 }
 
@@ -458,9 +678,10 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ResolutionSelector":"KANI🦀FLIP-W/H Selector",
     "ResolutionSelectorConst":"KANI🦀FLIP-W/H SelectorConst",
     "KANI_TextFind":"KANI🦀TextFind",
-    "KANI_Checkpoint_Loader_Simple":"KANI🦀ckpt_Loader_Simple",
+    "KANI_Checkpoint_Loader_From_String":"KANI🦀ckpt_Loader_From_String",
     "KANI_TrueorFalse":"KANI🦀True-or-False",
     "KANI_ShowAnything":"KANI🦀showAnything",
     "KANI_Multiplexer":"KANI🦀Multiplexer",
+    "KANI_MathExpression": "KANI🦀Math Expression",
     "StringNodeClass":"myStringNode"
 }
