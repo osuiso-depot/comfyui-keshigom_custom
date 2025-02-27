@@ -10,9 +10,11 @@ console.log("★★★KJ?: ", app.ui.settings.getSettingValue("KJNodes.disablePr
 console.log("★★★autocolor?: ", app.ui.settings.getSettingValue("KJNodes.nodeAutoColor"))
 
 
+console.log(LGraphCanvas.node_colors)
 // Nodes that allow you to tunnel connections for cleaner graphs
 function setColorAndBgColor(type) {
     const colorMap = {
+        "DEFAULT": { color: undefined, bgcolor: undefined},
         "MODEL": LGraphCanvas.node_colors.blue,
         "LATENT": LGraphCanvas.node_colors.purple,
         "VAE": LGraphCanvas.node_colors.red,
@@ -20,6 +22,7 @@ function setColorAndBgColor(type) {
         "IMAGE": LGraphCanvas.node_colors.pale_blue,
         "CLIP": LGraphCanvas.node_colors.yellow,
         "FLOAT": LGraphCanvas.node_colors.green,
+        "STRING": { color: "#255A1D", bgcolor: "#2F7024"},
         "MASK": { color: "#1c5715", bgcolor: "#1f401b"},
         "INT": { color: "#1b4669", bgcolor: "#29699c"},
         "CONTROL_NET": { color: "#156653", bgcolor: "#1c453b"},
@@ -77,7 +80,7 @@ app.registerExtension({
           (s, t, u, v, x) => {
             node.validateName(node.graph);
             if(this.widgets[0].value !== ''){
-              this.title = (!disablePrefix ? "Set_" : "") + this.widgets[0].value;
+              this.title = (!disablePrefix ? "🦀Set_" : "") + this.widgets[0].value;
             }
             this.update();
             this.properties.previousName = this.widgets[0].value;
@@ -96,12 +99,15 @@ app.registerExtension({
                     output
         ) {
           //On Disconnect
+          console.log(arguments);
+          console.log("this.inputs[slot]", this.inputs[slot]);
           if (slotType == 1 && !isChangeConnect) {
-            if(this.inputs[slot].name === ''){
+            // if(this.inputs[slot].name === ''){
               this.inputs[slot].type = '*';
               this.inputs[slot].name = '*';
-              this.title = "Set"
-            }
+              this.title = "🦀SetNode"
+              setColorAndBgColor.call(this, "DEFAULT");
+            // }
           }
           if (slotType == 2 && !isChangeConnect) {
             this.outputs[slot].type = '*';
@@ -110,13 +116,14 @@ app.registerExtension({
           }
           //On Connect
           if (link_info && node.graph && slotType == 1 && isChangeConnect) {
+            console.log("link_info: ", link_info)
             const fromNode = node.graph._nodes.find((otherNode) => otherNode.id == link_info.origin_id);
 
             if (fromNode && fromNode.outputs && fromNode.outputs[link_info.origin_slot]) {
               const type = fromNode.outputs[link_info.origin_slot].type;
 
-              if (this.title === "Set"){
-                this.title = (!disablePrefix ? "Set_" : "") + type;
+              if (this.title === "🦀SetNode"){
+                this.title = (!disablePrefix ? "🦀Set_" : "") + type;
               }
               if (this.widgets[0].value === '*'){
                 this.widgets[0].value = type
@@ -130,7 +137,13 @@ app.registerExtension({
               //   setColorAndBgColor.call(this, type);
               // }
               // 無条件で色を変える
-              setColorAndBgColor.call(this, type);
+              console.log("★★★", this);
+              if(fromNode.color != undefined && fromNode.bgcolor != undefined){
+                this.color = fromNode.color;
+                this.bgcolor = fromNode.bgcolor;
+              }else{
+                setColorAndBgColor.call(this, type);
+              }
             } else {
                 showAlert("node input undefined.")
             }
@@ -197,6 +210,9 @@ app.registerExtension({
           }
 
           const getters = this.findGetters(node.graph);
+
+
+
           getters.forEach(getter => {
             getter.setType(this.inputs[0].type);
           });
@@ -208,7 +224,7 @@ app.registerExtension({
             });
           }
 
-          const allGetters = node.graph._nodes.filter(otherNode => otherNode.type === "GetNode");
+          const allGetters = node.graph._nodes.filter(otherNode => otherNode.type === "🦀GetNode");
           allGetters.forEach(otherNode => {
             if (otherNode.setComboValues) {
               otherNode.setComboValues();
@@ -219,7 +235,7 @@ app.registerExtension({
 
         this.findGetters = function(graph, checkForPreviousName) {
           const name = checkForPreviousName ? this.properties.previousName : this.widgets[0].value;
-          return graph._nodes.filter(otherNode => otherNode.type === 'GetNode' && otherNode.widgets[0].value === name && name !== '');
+          return graph._nodes.filter(otherNode => otherNode.type === '🦀GetNode' && otherNode.widgets[0].value === name && name !== '');
         }
 
 
@@ -229,7 +245,7 @@ app.registerExtension({
 
 
       onRemoved() {
-        const allGetters = this.graph._nodes.filter((otherNode) => otherNode.type == "GetNode");
+        const allGetters = this.graph._nodes.filter((otherNode) => otherNode.type == "🦀GetNode");
         allGetters.forEach((otherNode) => {
           if (otherNode.setComboValues) {
             otherNode.setComboValues([this]);
@@ -325,7 +341,7 @@ app.registerExtension({
     LiteGraph.registerNodeType(
       "🦀SetNode",
       Object.assign(SetNode, {
-        title: "Set",
+        title: "🦀Set",
       })
     );
 
@@ -385,21 +401,24 @@ app.registerExtension({
           node.serialize();
         }
 
+        // valueが変更されたときに呼び出される
         this.onRename = function() {
           const setter = this.findSetter(node.graph);
           if (setter) {
             let linkType = (setter.inputs[0].type);
 
             this.setType(linkType);
-            this.title = (!disablePrefix ? "Get_" : "") + setter.widgets[0].value;
+            this.title = (!disablePrefix ? "🦀Get_" : "") + setter.widgets[0].value;
+
+            console.log("★onRename: ", setter);
 
             // if (app.ui.settings.getSettingValue("KJNodes.nodeAutoColor")){
             //   setColorAndBgColor.call(this, linkType);
             // }
             // 無条件で色を変える
-            setColorAndBgColor.call(this, linkType);
-
-          } else {
+            this.color = setter.color;
+            this.bgcolor = setter.bgcolor;
+        } else {
             this.setType('*');
           }
         }
@@ -445,6 +464,8 @@ app.registerExtension({
 
       getInputLink(slot) {
         const setter = this.findSetter(this.graph);
+
+        console.log("setter: ", setter);
 
         if (setter) {
           const slotInfo = setter.inputs[slot];
@@ -495,7 +516,7 @@ app.registerExtension({
     LiteGraph.registerNodeType(
       "🦀GetNode",
       Object.assign(GetNode, {
-        title: "Get",
+        title: "🦀Get",
       })
     );
 
